@@ -1,0 +1,10 @@
+flask>=1.1.2
+flask-cors
+deepface>=0.0.75
+opencv-python>=4.5.5.64
+numpy
+pandas
+Pillow
+mtcnn
+retina-face
+gunicorn
