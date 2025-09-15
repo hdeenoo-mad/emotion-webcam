@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Détection d'émotions</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #f0f0f0;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    #video {
+      border: 4px solid #00ff88;
+      border-radius: 12px;
+      box-shadow: 0px 0px 20px rgba(0, 255, 136, 0.4);
+      margin-bottom: 20px;
+    }
+    #result {
+      font-size: 1.2em;
+      margin-bottom: 20px;
+    }
+    .bar-container {
+      width: 80%;
+      background: #333;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 30px;
+    }
+    .bar {
+      height: 20px;
+      border-radius: 4px;
+      margin: 6px 0;
+      background: linear-gradient(90deg, #00ff88, #0077ff);
+      transition: width 0.5s ease-in-out;
+    }
+    .bar-label {
+      font-size: 0.9em;
+      margin-bottom: 2px;
+    }
+    .slider-container {
+      width: 80%;
+      margin-top: 20px;
+      text-align: center;
+    }
+    .slider {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 10px;
+      border-radius: 5px;
+      background: #444;
+      outline: none;
+      transition: all 0.3s;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #00ff88;
+      cursor: pointer;
+      box-shadow: 0px 0px 5px rgba(0,255,136,0.7);
+    }
+  </style>
+</head>
+<body>
+  <h1>🎥 Détection d'émotions avec la webcam</h1>
+  <video id="video" autoplay playsinline width="400"></video>
+  <p id="result">Analyse en cours...</p>
+
+  <!-- Barre des émotions -->
+  <div class="bar-container" id="emotion-bars"></div>
+
+  <!-- Slider pour l’émotion dominante -->
+  <div class="slider-container">
+    <p>Émotion dominante : <span id="dominant"></span></p>
+    <input type="range" min="0" max="100" value="0" class="slider" id="emo-slider">
+  </div>
+
+  <script>
+const video = document.getElementById("video");
+const resultEl = document.getElementById("result");
+const barContainer = document.getElementById("emotion-bars");
+const slider = document.getElementById("emo-slider");
+const dominantLabel = document.getElementById("dominant");
+
+navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+  video.srcObject = stream;
+});
+
+// Animation du slider
+let targetValue = 0;
+function animateSlider() {
+  const current = parseFloat(slider.value);
+  const diff = targetValue - current;
+  // Si différence suffisante, on avance de 10% de la distance
+  if (Math.abs(diff) > 0.5) {
+    slider.value = current + diff * 0.1;
+  } else {
+    slider.value = targetValue;
+  }
+  requestAnimationFrame(animateSlider);
+}
+animateSlider();
+
+// Capture toutes les 2s et envoie au serveur
+const canvas = document.createElement("canvas");
+const context = canvas.getContext("2d");
+
+setInterval(() => {
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const dataUrl = canvas.toDataURL("image/jpeg");
+
+  fetch("/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: dataUrl })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      resultEl.textContent = "Erreur: " + data.error;
+    } else {
+      // Emotion dominante
+      resultEl.textContent = "Émotion dominante : " + data.dominant_emotion;
+      dominantLabel.textContent = data.dominant_emotion;
+
+      // Barres de probabilités
+      const emotions = data.emotion;
+      barContainer.innerHTML = "";
+      for (const [emo, val] of Object.entries(emotions)) {
+        const percent = Math.round(val);
+        const label = document.createElement("div");
+        label.className = "bar-label";
+        label.textContent = `${emo} (${percent}%)`;
+
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        bar.style.width = percent + "%";
+
+        barContainer.appendChild(label);
+        barContainer.appendChild(bar);
+      }
+
+      // Slider animé : on ne change pas directement slider.value
+      const domEmo = data.dominant_emotion;
+      targetValue = Math.round(emotions[domEmo]);
+    }
+  });
+}, 2000);
+</script>
+
+</body>
+</html>
