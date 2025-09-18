@@ -23,19 +23,68 @@
     #video {
       border: 1px solid #ffffff;
       border-radius: 12px;
-      box-shadow: 0px 0px 20px rgba(0, 255, 136, 0.4);
+      box-shadow: 0px 0px 20px rgba(224, 23, 16, 0.4);
       margin-bottom: 20px;
     }
     #result {
       font-size: 1.2em;
       margin-bottom: 20px;
     }
+    
+    /* Contrôles d'enregistrement */
+    .recording-controls {
+      margin: 20px 0;
+      text-align: center;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-start {
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      color: white;
+    }
+    .btn-stop {
+      background: linear-gradient(135deg, #f44336, #d32f2f);
+      color: white;
+    }
+    
+    #recording-status {
+      font-weight: bold;
+      padding: 8px 16px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(5px);
+      margin: 10px 0;
+    }
+    
     .bar-container {
       width: 80%;
       background: #333;
       border-radius: 8px;
-      padding: 10px;
+      padding: 15px;
       margin-bottom: 30px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     }
     .bar {
       height: 20px;
@@ -48,6 +97,7 @@
       font-size: 0.9em;
       margin-bottom: 2px;
     }
+    
     .slider-container {
       width: 80%;
       margin-top: 20px;
@@ -57,7 +107,7 @@
       -webkit-appearance: none;
       width: 100%;
       height: 10px;
-      border-radius: 5px;
+      border-radius: 4px;
       background: #444;
       outline: none;
       transition: all 0.3s ease-in-out;
@@ -72,20 +122,83 @@
       cursor: pointer;
       box-shadow: 0px 0px 5px #9dff76;
     }
+    
+    /* Résultats de session */
+    .session-results {
+      margin: 20px 0;
+      padding: 20px;
+      border: 2px dashed #444;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(5px);
+      width: 80%;
+      max-width: 600px;
+    }
+    .session-results h3 {
+      margin-top: 0;
+      color: #9dff76;
+      text-align: center;
+    }
+    .emotion-stat {
+      margin: 15px 0;
+      padding: 12px;
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+    }
+    .dominant-stat {
+      background: rgba(76, 175, 80, 0.2);
+      border-left: 4px solid #4CAF50;
+    }
+    .subdominant-stat {
+      background: rgba(255, 152, 0, 0.2);
+      border-left: 4px solid #FF9800;
+    }
+    .stat-title {
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-bottom: 5px;
+    }
+    .stat-details {
+      font-size: 0.9em;
+      opacity: 0.8;
+    }
   </style>
 </head>
 <body>
   <h1>🎥 Détection d'émotions avec la webcam</h1>
   <video id="video" autoplay playsinline width="400"></video>
+  
+  <!-- Contrôles d'enregistrement -->
+  <div class="recording-controls">
+    <button id="start-btn" class="btn btn-start">
+      ▶️ Commencer l'enregistrement
+    </button>
+    <button id="stop-btn" class="btn btn-stop" disabled>
+      ⏹️ Arrêter l'enregistrement
+    </button>
+  </div>
+  
+  <!-- Statut de l'enregistrement -->
+  <div id="recording-status">
+    📹 Prêt à enregistrer
+  </div>
+  
   <p id="result">Analyse en cours...</p>
 
   <!-- Barre des émotions -->
   <div class="bar-container" id="emotion-bars"></div>
 
-  <!-- Slider pour l’émotion dominante -->
+  <!-- Slider pour l'émotion dominante -->
   <div class="slider-container">
     <p>Émotion dominante : <span id="dominant"></span></p>
     <input type="range" min="0" max="100" value="0" class="slider" id="emo-slider">
+  </div>
+  
+  <!-- Zone d'affichage des résultats de session -->
+  <div id="session-results" class="session-results">
+    <p style="text-align: center; color: #666; font-style: italic;">
+      Les résultats de la session d'enregistrement apparaîtront ici
+    </p>
   </div>
 
   <script>
@@ -94,6 +207,18 @@ const resultEl = document.getElementById("result");
 const barContainer = document.getElementById("emotion-bars");
 const slider = document.getElementById("emo-slider");
 const dominantLabel = document.getElementById("dominant");
+
+// Éléments pour l'enregistrement
+const startBtn = document.getElementById("start-btn");
+const stopBtn = document.getElementById("stop-btn");
+const recordingStatus = document.getElementById("recording-status");
+const sessionResults = document.getElementById("session-results");
+
+// Variables d'enregistrement
+let isRecording = false;
+let recordingInterval = null;
+let emotionHistory = []; // Stockage des émotions enregistrées
+let startTime = null;
 
 navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
   video.srcObject = stream;
@@ -104,7 +229,6 @@ let targetValue = 0;
 function animateSlider() {
   const current = parseFloat(slider.value);
   const diff = targetValue - current;
-  // Si différence suffisante, on avance de 10% de la distance
   if (Math.abs(diff) > 0.5) {
     slider.value = current + diff * 0.1;
   } else {
@@ -114,11 +238,68 @@ function animateSlider() {
 }
 animateSlider();
 
-// Capture toutes les 2s et envoie au serveur
-const canvas = document.createElement("canvas");
-const context = canvas.getContext("2d");
+// Fonction pour calculer les émotions les plus présentes
+function calculateDominantEmotions(history) {
+  if (history.length === 0) return null;
+  
+  // Compter toutes les occurrences d'émotions dominantes et sous-dominantes
+  const emotionCounts = {};
+  const subEmotionCounts = {};
+  
+  history.forEach(record => {
+    // Compter les émotions dominantes
+    if (record.dominant) {
+      emotionCounts[record.dominant] = (emotionCounts[record.dominant] || 0) + 1;
+    }
+    
+    // Compter les émotions sous-dominantes
+    if (record.subDominant) {
+      subEmotionCounts[record.subDominant] = (subEmotionCounts[record.subDominant] || 0) + 1;
+    }
+  });
+  
+  // Trouver les plus fréquentes
+  const mostFrequentDominant = Object.entries(emotionCounts)
+    .sort(([,a], [,b]) => b - a)[0];
+  
+  const mostFrequentSubDominant = Object.entries(subEmotionCounts)
+    .sort(([,a], [,b]) => b - a)[0];
+  
+  return {
+    dominant: mostFrequentDominant ? {
+      emotion: mostFrequentDominant[0],
+      count: mostFrequentDominant[1],
+      percentage: Math.round((mostFrequentDominant[1] / history.length) * 100)
+    } : null,
+    subDominant: mostFrequentSubDominant ? {
+      emotion: mostFrequentSubDominant[0],
+      count: mostFrequentSubDominant[1],
+      percentage: Math.round((mostFrequentSubDominant[1] / history.length) * 100)
+    } : null,
+    totalRecords: history.length,
+    duration: history.length * 2 // 2 secondes par enregistrement
+  };
+}
 
-setInterval(() => {
+// Fonction pour trouver l'émotion sous-dominante
+function getSubDominantEmotion(emotions) {
+  const sortedEmotions = Object.entries(emotions)
+    .sort(([,a], [,b]) => b - a);
+  
+  if (sortedEmotions.length > 1) {
+    return {
+      emotion: sortedEmotions[1][0],
+      value: sortedEmotions[1][1]
+    };
+  }
+  return null;
+}
+
+// Fonction d'analyse (maintenant utilisée pour temps réel ET enregistrement)
+function analyzeEmotion() {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -133,35 +314,154 @@ setInterval(() => {
   .then(data => {
     if (data.error) {
       resultEl.textContent = "Erreur: " + data.error;
-    } else {
-      // Emotion dominante
-      resultEl.textContent = "Émotion dominante : " + data.dominant_emotion;
-      dominantLabel.textContent = data.dominant_emotion;
-
-      // Barres de probabilités
-      const emotions = data.emotion;
-      barContainer.innerHTML = "";
-      for (const [emo, val] of Object.entries(emotions)) {
-        const percent = Math.round(val);
-        const label = document.createElement("div");
-        label.className = "bar-label";
-        label.textContent = `${emo} (${percent}%)`;
-
-        const bar = document.createElement("div");
-        bar.className = "bar";
-        bar.style.width = percent + "%";
-
-        barContainer.appendChild(label);
-        barContainer.appendChild(bar);
-      }
-
-      // Slider animé : on ne change pas directement slider.value
-      const domEmo = data.dominant_emotion;
-      targetValue = Math.round(emotions[domEmo]);
+      return;
     }
-  });
-}, 2000);
-</script>
+    
+    const subDominant = getSubDominantEmotion(data.emotion);
+    
+    // Si on enregistre, stocker les données
+    if (isRecording) {
+      const record = {
+        timestamp: Date.now(),
+        dominant: data.dominant_emotion,
+        subDominant: subDominant ? subDominant.emotion : null,
+        emotions: {...data.emotion}
+      };
+      emotionHistory.push(record);
+      
+      // Mise à jour du statut d'enregistrement
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      recordingStatus.textContent = `🔴 Enregistrement... (${elapsed}s - ${emotionHistory.length} captures)`;
+    }
+    
+    // Affichage temps réel (même pendant l'enregistrement)
+    let displayText = "Émotion dominante : " + data.dominant_emotion;
+    if (subDominant) {
+      const subPercent = Math.round(subDominant.value);
+      displayText += ` | Sous-dominante : ${subDominant.emotion} (${subPercent}%)`;
+    }
+    
+    resultEl.textContent = displayText;
+    dominantLabel.textContent = data.dominant_emotion;
 
+    // Barres de probabilités
+    updateEmotionBars(data.emotion, data.dominant_emotion, subDominant);
+
+    // Slider animé
+    targetValue = Math.round(data.emotion[data.dominant_emotion]);
+  })
+  .catch(error => {
+    console.error('Erreur analyse:', error);
+    resultEl.textContent = "Erreur de connexion";
+  });
+}
+
+// Mise à jour des barres d'émotions
+function updateEmotionBars(emotions, dominantEmotion, subDominant) {
+  barContainer.innerHTML = "";
+  
+  for (const [emo, val] of Object.entries(emotions)) {
+    const percent = Math.round(val);
+    const label = document.createElement("div");
+    label.className = "bar-label";
+    
+    if (emo === dominantEmotion) {
+      label.textContent = `${emo} (${percent}%) - DOMINANTE`;
+      label.style.fontWeight = "bold";
+      label.style.color = "#4CAF50";
+    } else if (subDominant && emo === subDominant.emotion) {
+      label.textContent = `${emo} (${percent}%) - SOUS-DOMINANTE`;
+      label.style.fontWeight = "bold";
+      label.style.color = "#FF9800";
+    } else {
+      label.textContent = `${emo} (${percent}%)`;
+    }
+
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    bar.style.width = percent + "%";
+    
+    if (emo === dominantEmotion) {
+      bar.style.backgroundColor = "#4CAF50";
+    } else if (subDominant && emo === subDominant.emotion) {
+      bar.style.backgroundColor = "#FF9800";
+    }
+
+    barContainer.appendChild(label);
+    barContainer.appendChild(bar);
+  }
+}
+
+// Événements des boutons
+startBtn.addEventListener("click", () => {
+  if (!isRecording) {
+    isRecording = true;
+    emotionHistory = [];
+    startTime = Date.now();
+    
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    
+    recordingStatus.textContent = "🔴 Enregistrement démarré...";
+    sessionResults.innerHTML = '<p style="text-align: center; color: #9dff76; font-style: italic;">Enregistrement en cours...</p>';
+    
+    // Démarrer l'analyse continue
+    recordingInterval = setInterval(analyzeEmotion, 2000);
+    
+    console.log("Enregistrement démarré");
+  }
+});
+
+stopBtn.addEventListener("click", () => {
+  if (isRecording) {
+    isRecording = false;
+    
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    
+    // Arrêter l'analyse
+    if (recordingInterval) {
+      clearInterval(recordingInterval);
+      recordingInterval = null;
+    }
+    
+    // Calculer les résultats de la session
+    const sessionStats = calculateDominantEmotions(emotionHistory);
+    
+    recordingStatus.textContent = "⏹️ Enregistrement arrêté";
+    
+    if (sessionStats && sessionStats.totalRecords > 0) {
+      let resultsHTML = `<h3>📊 Résultats de la session (${sessionStats.duration}s)</h3>`;
+      
+      if (sessionStats.dominant) {
+        resultsHTML += `<div class="emotion-stat dominant-stat">
+          <div class="stat-title">🏆 Émotion dominante : ${sessionStats.dominant.emotion}</div>
+          <div class="stat-details">Présente ${sessionStats.dominant.count}/${sessionStats.totalRecords} fois (${sessionStats.dominant.percentage}%)</div>
+        </div>`;
+      }
+      
+      if (sessionStats.subDominant) {
+        resultsHTML += `<div class="emotion-stat subdominant-stat">
+          <div class="stat-title">🥈 Émotion sous-dominante : ${sessionStats.subDominant.emotion}</div>
+          <div class="stat-details">Présente ${sessionStats.subDominant.count}/${sessionStats.totalRecords} fois (${sessionStats.subDominant.percentage}%)</div>
+        </div>`;
+      }
+      
+      sessionResults.innerHTML = resultsHTML;
+    } else {
+      sessionResults.innerHTML = '<p style="text-align: center; color: #f44336;">Aucune donnée enregistrée.</p>';
+    }
+    
+    console.log("Enregistrement arrêté. Données:", sessionStats);
+  }
+});
+
+// Analyse temps réel continue (seulement quand on n'enregistre pas)
+setInterval(() => {
+  if (!isRecording) {
+    analyzeEmotion();
+  }
+}, 2000);
+  </script>
 </body>
 </html>
